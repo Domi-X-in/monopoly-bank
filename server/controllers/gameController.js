@@ -30,6 +30,11 @@ exports.createGame = async (req, res) => {
       console.warn("Socket.io not available, could not emit gameCreated event");
     }
 
+    // Set no-cache headers
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
     res.status(201).json(game);
   } catch (error) {
     console.error("Error creating game:", error);
@@ -39,33 +44,98 @@ exports.createGame = async (req, res) => {
 
 exports.getGames = async (req, res) => {
   try {
-    console.log("Getting active games");
+    console.log("Getting games with improved query");
 
-    // Get only active games
-    const games = await Game.find({ status: "active" }).sort({ createdAt: -1 });
+    // Set no-cache headers to prevent browser caching
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
 
-    console.log(`Found ${games.length} active games`);
+    // First, count total games to see what's available
+    const totalGames = await Game.countDocuments({});
+    console.log(`Total games in database: ${totalGames}`);
 
-    // Log each game for debugging
-    games.forEach((game, index) => {
-      console.log(`Game ${index + 1}:`, {
-        id: game._id,
-        name: game.name,
-        status: game.status,
-        createdAt: game.createdAt,
-      });
+    // Get all games to check their status
+    const allGames = await Game.find({}).sort({ createdAt: -1 });
+    console.log(`Retrieved ${allGames.length} total games`);
+
+    // Log all games with their status
+    allGames.forEach((game, index) => {
+      console.log(
+        `Game ${index + 1}: id=${game._id}, name=${game.name}, status="${
+          game.status
+        }", createdAt=${game.createdAt}`
+      );
     });
 
-    res.json(games);
+    // Find games with status matching 'active' in a case-insensitive way
+    // This handles variations like 'active', 'Active', 'ACTIVE', etc.
+    const games = await Game.find({
+      status: { $regex: new RegExp("^active$", "i") },
+    }).sort({ createdAt: -1 });
+
+    console.log(
+      `Found ${games.length} active games using case-insensitive match`
+    );
+
+    // If no games found with regex match, try direct query with different case variations
+    if (games.length === 0 && totalGames > 0) {
+      console.log(
+        "No games found with regex match, trying direct status values"
+      );
+
+      // Try all possible status variations
+      const possibleStatuses = ["active", "Active", "ACTIVE"];
+      let statusGames = [];
+
+      for (const status of possibleStatuses) {
+        const found = await Game.find({ status }).sort({ createdAt: -1 });
+        console.log(`Status "${status}" returned ${found.length} games`);
+        if (found.length > 0) {
+          statusGames = found;
+          break;
+        }
+      }
+
+      // If found games with different case, return them
+      if (statusGames.length > 0) {
+        console.log(
+          `Returning ${statusGames.length} games found with direct status check`
+        );
+        return res.json(statusGames);
+      }
+
+      // As a last resort, just return all non-ended games
+      const nonEndedGames = await Game.find({
+        status: { $ne: "ended" },
+      }).sort({ createdAt: -1 });
+
+      console.log(`Found ${nonEndedGames.length} non-ended games as fallback`);
+      return res.json(nonEndedGames);
+    }
+
+    // Add debug headers
+    res.setHeader("X-Debug-Total-Games", totalGames);
+    res.setHeader("X-Debug-Active-Games", games.length);
+
+    // Return the array of active games directly
+    return res.json(games);
   } catch (error) {
     console.error("Error getting games:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    return res
+      .status(500)
+      .json({ message: "Server error", error: error.message });
   }
 };
 
 exports.getGameById = async (req, res) => {
   try {
     console.log("Getting game by ID:", req.params.id);
+
+    // Set no-cache headers
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
 
     const game = await Game.findById(req.params.id);
 
@@ -75,10 +145,12 @@ exports.getGameById = async (req, res) => {
     }
 
     console.log("Game found:", game);
-    res.json(game);
+    return res.json(game);
   } catch (error) {
     console.error("Error getting game:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    return res
+      .status(500)
+      .json({ message: "Server error", error: error.message });
   }
 };
 
@@ -121,9 +193,16 @@ exports.endGame = async (req, res) => {
       console.warn("Socket.io not available, could not emit gameEnded event");
     }
 
-    res.json(game);
+    // Set no-cache headers
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
+    return res.json(game);
   } catch (error) {
     console.error("Error ending game:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    return res
+      .status(500)
+      .json({ message: "Server error", error: error.message });
   }
 };

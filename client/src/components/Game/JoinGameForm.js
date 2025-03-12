@@ -131,6 +131,25 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
   const navigate = useNavigate();
   const socket = useSocket();
 
+  // Log when games are received or updated
+  useEffect(() => {
+    if (Array.isArray(games)) {
+      console.log(`JoinGameForm has ${games.length} games:`, games);
+
+      // Check for common issues
+      const activeGames = games.filter(
+        (game) => game && game.status && game.status.toLowerCase() === "active"
+      );
+      console.log(`Active games count: ${activeGames.length}`);
+
+      if (games.length > 0 && activeGames.length === 0) {
+        console.warn(
+          "Games exist but none are active! Check status field case sensitivity."
+        );
+      }
+    }
+  }, [games]);
+
   // Update games if the allGames prop changes
   useEffect(() => {
     if (Array.isArray(allGames)) {
@@ -147,18 +166,117 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
           setFetchingGames(true);
           console.log("Fetching games from JoinGameForm...");
           const response = await api.getGames();
-          console.log("Games API response in JoinGameForm:", response);
+          console.log("Raw Games API response:", response);
 
-          if (response && response.data) {
-            setGames(response.data);
+          // Extract games data from response - handle different possible formats
+          let gamesData;
 
-            // Set first game as default if none is selected
-            if (!selectedGameId && response.data.length > 0) {
-              setSelectedGameId(response.data[0]._id);
+          if (Array.isArray(response)) {
+            // Direct array response
+            gamesData = response;
+            console.log(
+              "Response is a direct array with",
+              gamesData.length,
+              "games"
+            );
+          } else if (Array.isArray(response.data)) {
+            // Response has data property that is an array
+            gamesData = response.data;
+            console.log(
+              "Found games array in response.data with",
+              gamesData.length,
+              "items"
+            );
+          } else if (response && typeof response === "object") {
+            if (
+              response.data &&
+              typeof response.data === "object" &&
+              !Array.isArray(response.data)
+            ) {
+              // Handle object response with nested structure
+              console.log(
+                "Response.data is an object, checking for games arrays inside"
+              );
+
+              // Check for common wrapper patterns
+              const possibleArrayProps = ["data", "games", "results", "items"];
+              let foundArray = false;
+
+              for (const prop of possibleArrayProps) {
+                if (Array.isArray(response.data[prop])) {
+                  gamesData = response.data[prop];
+                  console.log(
+                    `Found games array in response.data.${prop} with ${gamesData.length} items`
+                  );
+                  foundArray = true;
+                  break;
+                }
+              }
+
+              if (!foundArray) {
+                // Last resort - check if the object itself has game properties
+                if (response.data._id && response.data.name) {
+                  // Single game object
+                  gamesData = [response.data];
+                  console.log("Found a single game object in response.data");
+                } else {
+                  console.warn(
+                    "Couldn't find a games array in response.data object"
+                  );
+                  gamesData = [];
+                }
+              }
+            } else {
+              // Direct response object might have games
+              console.log("Response is an object, checking for games arrays");
+
+              // Check for common wrapper patterns
+              const possibleArrayProps = ["data", "games", "results", "items"];
+              let foundArray = false;
+
+              for (const prop of possibleArrayProps) {
+                if (Array.isArray(response[prop])) {
+                  gamesData = response[prop];
+                  console.log(
+                    `Found games array in response.${prop} with ${gamesData.length} items`
+                  );
+                  foundArray = true;
+                  break;
+                }
+              }
+
+              if (!foundArray) {
+                // Last resort - check if the object itself has game properties
+                if (response._id && response.name) {
+                  // Single game object
+                  gamesData = [response];
+                  console.log("Found a single game object in response");
+                } else {
+                  console.warn(
+                    "Couldn't find a games array in response object"
+                  );
+                  // Default to empty array as fallback
+                  gamesData = [];
+                }
+              }
             }
           } else {
-            console.error("Invalid response from getGames:", response);
-            setError("Failed to fetch games data");
+            console.error("Unexpected response format:", typeof response);
+            gamesData = [];
+          }
+
+          // Log extracted data
+          if (Array.isArray(gamesData)) {
+            console.log("Final extracted games data:", gamesData);
+            setGames(gamesData);
+
+            // Set first game as default if none is selected
+            if (!selectedGameId && gamesData.length > 0) {
+              setSelectedGameId(gamesData[0]._id);
+            }
+          } else {
+            console.error("Failed to extract games array");
+            setError("Unexpected data format received from server");
           }
         } catch (err) {
           console.error("Failed to fetch games:", err);
@@ -204,10 +322,25 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
           const response = await api.getPlayers(selectedGameId);
           console.log("Players API response:", response);
 
-          const hasBank =
+          // Extract players data - handle different response formats
+          let playersData;
+
+          if (Array.isArray(response)) {
+            playersData = response;
+          } else if (
+            response &&
             response.data &&
-            Array.isArray(response.data) &&
-            response.data.some((player) => player.isBank);
+            Array.isArray(response.data)
+          ) {
+            playersData = response.data;
+          } else {
+            console.error("Unexpected players response format");
+            playersData = [];
+          }
+
+          const hasBank =
+            Array.isArray(playersData) &&
+            playersData.some((player) => player.isBank);
 
           console.log("Bank exists:", hasBank);
           setBankExists(hasBank);
@@ -272,10 +405,24 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
       };
 
       const response = await api.createPlayer(playerData);
-      console.log("Player created:", response.data);
+      console.log("Player created response:", response);
+
+      // Extract player data from response
+      let createdPlayer;
+
+      if (response && response.data) {
+        createdPlayer = response.data;
+      } else if (response && response._id) {
+        createdPlayer = response;
+      } else {
+        console.error("Unexpected player creation response:", response);
+        throw new Error("Invalid player creation response");
+      }
+
+      console.log("Player created:", createdPlayer);
 
       // Navigate to player dashboard
-      navigate(`/game/${selectedGameId}/player/${response.data._id}`);
+      navigate(`/game/${selectedGameId}/player/${createdPlayer._id}`);
     } catch (err) {
       console.error("Error joining game:", err);
       setError(
@@ -286,53 +433,125 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
     }
   };
 
-  const handleRefresh = () => {
-    setGames([]); // Clear any local state that might be caching the games
-    // Clear any cached responses in the browser
-    window.sessionStorage.clear();
-    window.localStorage.clear();
+  const handleRefresh = async () => {
+    try {
+      setFetchingGames(true);
+      setError("");
+      setGames([]); // Clear existing games
 
-    if (onRefreshGames) {
-      onRefreshGames();
-    } else {
-      // Fetch games directly if no refresh callback provided
-      const fetchGames = async () => {
-        try {
-          setFetchingGames(true);
-          // Add timestamp to URL to force a fresh request
-          const timestamp = new Date().getTime();
-          const response = await api.getGames();
+      // Clear any cached responses in the browser
+      window.sessionStorage.clear();
+      window.localStorage.clear();
 
-          if (response && response.data) {
-            console.log("Fetched games data:", response.data);
-            setGames(response.data);
+      console.log("Refreshing games with direct fetch...");
 
-            // If games are received but not displayed, log more details
-            if (Array.isArray(response.data) && response.data.length > 0) {
-              console.log(
-                "Games received but not displaying. Game details:",
-                response.data.map((g) => ({
-                  id: g._id,
-                  name: g.name,
-                  status: g.status,
-                }))
-              );
-            }
-          } else {
-            console.error("Invalid or empty response:", response);
-            setError("No games data returned from server");
+      // Make direct fetch request to bypass any caching
+      const response = await fetch("/api/games?_=" + new Date().getTime(), {
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      });
+
+      console.log("Fetch response status:", response.status);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Get the response text first for debugging
+      const responseText = await response.text();
+      console.log("Raw response text:", responseText);
+
+      // Parse it as JSON if not empty
+      if (!responseText.trim()) {
+        console.log("Empty response received");
+        setGames([]);
+        return;
+      }
+
+      let responseData;
+      try {
+        responseData = JSON.parse(responseText);
+        console.log(
+          "Parsed response type:",
+          Array.isArray(responseData) ? "Array" : typeof responseData
+        );
+        console.log("Full response data:", responseData);
+      } catch (e) {
+        console.error("Failed to parse JSON:", e);
+        setError("Invalid JSON response from server");
+        return;
+      }
+
+      // Extract games data from the response
+      let gamesData;
+
+      if (Array.isArray(responseData)) {
+        // Direct array response
+        gamesData = responseData;
+      } else if (responseData && typeof responseData === "object") {
+        // Object response - check for common wrapper patterns
+        const potentialArrayProps = ["data", "games", "results", "items"];
+        let foundArray = false;
+
+        for (const prop of potentialArrayProps) {
+          if (Array.isArray(responseData[prop])) {
+            gamesData = responseData[prop];
+            console.log(`Found games array in responseData.${prop}`);
+            foundArray = true;
+            break;
           }
-        } catch (err) {
-          console.error("Failed to refresh games:", err);
-          setError(`Error refreshing games: ${err.message}`);
-        } finally {
-          setFetchingGames(false);
         }
-      };
 
-      fetchGames();
+        if (!foundArray) {
+          // As a last resort, check if the object itself has game-like properties
+          if (responseData._id && responseData.name) {
+            gamesData = [responseData]; // Single game object
+            console.log("Found a single game object in response");
+          } else {
+            console.log("Object properties:", Object.keys(responseData));
+            setError("Could not find games data in response");
+            return;
+          }
+        }
+      } else {
+        console.error("Unexpected response data type:", typeof responseData);
+        setError("Unexpected data format received from server");
+        return;
+      }
+
+      // Use the extracted games data
+      if (Array.isArray(gamesData)) {
+        console.log(`Got ${gamesData.length} games from refresh`);
+
+        // Filter for active games if status field is present
+        const activeGames = gamesData.filter(
+          (game) => !game.status || game.status.toLowerCase() === "active"
+        );
+
+        console.log(`Active games: ${activeGames.length}`);
+
+        // Set all games since filtering might happen on the server
+        setGames(gamesData);
+
+        if (gamesData.length > 0) {
+          // Log first game details for debugging
+          console.log("Sample game:", gamesData[0]);
+        }
+      } else {
+        console.error("Failed to extract games array");
+        setError("Unexpected data format received from server");
+      }
+    } catch (err) {
+      console.error("Error in handleRefresh:", err);
+      setError(`Error refreshing games: ${err.message}`);
+    } finally {
+      setFetchingGames(false);
     }
   };
+
   if (fetchingGames) {
     return (
       <Card>
@@ -428,15 +647,13 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
         </div>
       )}
 
-      {/* Optional debug info for development */}
-      {process.env.NODE_ENV !== "production" && (
-        <div style={{ marginTop: "20px", fontSize: "12px", color: "#777" }}>
-          <div>Games count: {games ? games.length : 0}</div>
-          <div>Selected game: {selectedGameId || "None"}</div>
-          <div>Socket connected: {socket ? "Yes" : "No"}</div>
-          <div>Bank exists: {bankExists ? "Yes" : "No"}</div>
-        </div>
-      )}
+      {/* Debug info */}
+      <div style={{ marginTop: "20px", fontSize: "12px", color: "#777" }}>
+        <div>Games count: {games ? games.length : 0}</div>
+        <div>Selected game: {selectedGameId || "None"}</div>
+        <div>Socket connected: {socket ? "Yes" : "No"}</div>
+        <div>Bank exists: {bankExists ? "Yes" : "No"}</div>
+      </div>
     </Card>
   );
 };
