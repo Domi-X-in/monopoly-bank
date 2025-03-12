@@ -1,22 +1,22 @@
 // client/src/pages/PlayerDashboard.js
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import styled from 'styled-components';
-import { useSocket } from '../contexts/SocketContext';
-import { Header } from '../components/UI/Header';
-import { Container } from '../components/Layout/Container';
-import { Card } from '../components/Layout/Card';
-import { Button } from '../components/UI/Button';
-import { PlayersList } from '../components/Game/PlayersList';
-import { PaymentForm } from '../components/Game/PaymentForm';
-import { TransactionsList } from '../components/Game/TransactionsList';
-import * as api from '../services/api';
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import styled from "styled-components";
+import { useSocket } from "../contexts/SocketContext";
+import { Header } from "../components/UI/Header";
+import { Container } from "../components/Layout/Container";
+import { Card } from "../components/Layout/Card";
+import { Button } from "../components/UI/Button";
+import { PlayersList } from "../components/Game/PlayersList";
+import { PaymentForm } from "../components/Game/PaymentForm";
+import { TransactionsList } from "../components/Game/TransactionsList";
+import * as api from "../services/api";
 
 const DashboardContainer = styled.div`
   display: grid;
   grid-template-columns: 1fr;
   gap: ${({ theme }) => theme.spacing.lg};
-  
+
   @media (min-width: ${({ theme }) => theme.breakpoints.desktop}) {
     grid-template-columns: 1fr 2fr;
   }
@@ -53,7 +53,8 @@ const PlayerRole = styled.div`
 const PlayerBalance = styled.div`
   font-size: ${({ theme }) => theme.typography.fontSizes.xxlarge};
   font-weight: ${({ theme }) => theme.typography.fontWeights.bold};
-  color: ${({ isBank, theme }) => isBank ? theme.colors.bank : theme.colors.primary};
+  color: ${({ isBank, theme }) =>
+    isBank ? theme.colors.bank : theme.colors.primary};
   margin-bottom: ${({ theme }) => theme.spacing.md};
 `;
 
@@ -72,91 +73,103 @@ const PlayerDashboard = () => {
   const { gameId, playerId } = useParams();
   const navigate = useNavigate();
   const socket = useSocket();
-  
+
   const [game, setGame] = useState(null);
   const [currentPlayer, setCurrentPlayer] = useState(null);
   const [players, setPlayers] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Fetch initial data
   useEffect(() => {
+    if (!socket) return;
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch game
         const gameResponse = await api.getGame(gameId);
         setGame(gameResponse.data);
-        
-        if (gameResponse.data.status === 'ended') {
-          alert('This game has ended');
-          navigate('/');
+
+        if (gameResponse.data.status === "ended") {
+          alert("This game has ended");
+          navigate("/");
           return;
         }
-        
+
         // Fetch current player
         const playerResponse = await api.getPlayer(playerId);
         setCurrentPlayer(playerResponse.data);
-        
+
         // Fetch all players in the game
         const playersResponse = await api.getPlayers(gameId);
         setPlayers(playersResponse.data);
-        
+
         // Fetch transactions
         const transactionsResponse = await api.getTransactions(gameId);
         setTransactions(transactionsResponse.data);
-        
+
         // Join the game room for real-time updates
-        socket.emit('joinGame', gameId);
-        
+        socket.emit("joinGame", gameId);
       } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-        alert('Failed to load game data');
-        navigate('/');
+        console.error("Error fetching dashboard data:", error);
+        alert("Failed to load game data");
+        navigate("/");
       } finally {
         setLoading(false);
       }
     };
-    
+
     fetchDashboardData();
   }, [gameId, playerId, navigate, socket]);
-  
+
   // Set up socket listeners for real-time updates
   useEffect(() => {
     if (!socket) return;
-    
-    // Player joined event
-    socket.on('playerJoined', (newPlayer) => {
-      if (newPlayer.gameId === gameId) {
-        setPlayers(prevPlayers => {
+
+    /// Player joined event
+    socket.on("playerJoined", (newPlayer) => {
+      if (newPlayer && newPlayer.gameId === gameId) {
+        setPlayers((prevPlayers) => {
+          // Ensure prevPlayers is an array
+          const currentPlayers = Array.isArray(prevPlayers) ? prevPlayers : [];
+
           // Check if player already exists (to prevent duplicates)
-          const exists = prevPlayers.some(p => p._id === newPlayer._id);
+          const exists = currentPlayers.some((p) => p._id === newPlayer._id);
           if (exists) {
-            return prevPlayers;
+            return currentPlayers;
           }
-          return [...prevPlayers, newPlayer];
+          return [...currentPlayers, newPlayer];
         });
       }
     });
-    
+
     // Transaction event
-    socket.on('transaction', ({ transaction, fromPlayer, toPlayer }) => {
-      if (transaction.gameId === gameId) {
-        // Update transactions list
-        setTransactions(prevTransactions => [transaction, ...prevTransactions]);
-        
-        // Update player balances
-        setPlayers(prevPlayers => prevPlayers.map(player => {
-          if (player._id === fromPlayer._id) {
-            return { ...player, balance: fromPlayer.balance };
-          }
-          if (player._id === toPlayer._id) {
-            return { ...player, balance: toPlayer.balance };
-          }
-          return player;
-        }));
-        
+    socket.on("transaction", ({ transaction, fromPlayer, toPlayer }) => {
+      if (transaction && transaction.gameId === gameId) {
+        // Update transactions list with defensive check
+        setTransactions((prevTransactions) => {
+          const currentTransactions = Array.isArray(prevTransactions)
+            ? prevTransactions
+            : [];
+          return [transaction, ...currentTransactions];
+        });
+
+        // Update player balances with defensive checks
+        setPlayers((prevPlayers) => {
+          if (!Array.isArray(prevPlayers)) return [];
+
+          return prevPlayers.map((player) => {
+            if (player._id === fromPlayer._id) {
+              return { ...player, balance: fromPlayer.balance };
+            }
+            if (player._id === toPlayer._id) {
+              return { ...player, balance: toPlayer.balance };
+            }
+            return player;
+          });
+        });
+
         // Update current player if affected
         if (currentPlayer) {
           if (currentPlayer._id === fromPlayer._id) {
@@ -167,106 +180,111 @@ const PlayerDashboard = () => {
         }
       }
     });
-    
+
     // Game ended event
-    socket.on('gameEnded', (endedGame) => {
-      if (endedGame._id === gameId) {
-        alert('This game has been ended by the bank');
-        navigate('/');
+    socket.on("gameEnded", (endedGame) => {
+      if (endedGame && endedGame._id === gameId) {
+        alert("This game has been ended by the bank");
+        navigate("/");
       }
     });
-    
+
     return () => {
-      socket.off('playerJoined');
-      socket.off('transaction');
-      socket.off('gameEnded');
+      socket.off("playerJoined");
+      socket.off("transaction");
+      socket.off("gameEnded");
     };
   }, [socket, gameId, currentPlayer, navigate]);
-  
+
   const handleEndGame = async () => {
     if (!currentPlayer?.isBank) return;
-    
-    if (window.confirm('Are you sure you want to end this game? This cannot be undone.')) {
+
+    if (
+      window.confirm(
+        "Are you sure you want to end this game? This cannot be undone."
+      )
+    ) {
       try {
         await api.endGame(currentPlayer._id);
-        alert('Game ended successfully');
-        navigate('/');
+        alert("Game ended successfully");
+        navigate("/");
       } catch (error) {
-        console.error('Error ending game:', error);
-        alert('Failed to end game');
+        console.error("Error ending game:", error);
+        alert("Failed to end game");
       }
     }
   };
-  
+
   // Handler for when payment is completed
   const handlePaymentComplete = async () => {
     try {
       // Refresh player data
       const playerResponse = await api.getPlayer(playerId);
       setCurrentPlayer(playerResponse.data);
-      
+
       // Refresh all players
       const playersResponse = await api.getPlayers(gameId);
       setPlayers(playersResponse.data);
-      
+
       // Refresh transactions
       const transactionsResponse = await api.getTransactions(gameId);
       setTransactions(transactionsResponse.data);
     } catch (error) {
-      console.error('Error refreshing data after payment:', error);
+      console.error("Error refreshing data after payment:", error);
     }
   };
-  
+
   if (loading || !game || !currentPlayer) {
     return (
       <>
         <Header />
         <Container>
-          <p style={{ textAlign: 'center' }}>Loading game data...</p>
+          <p style={{ textAlign: "center" }}>Loading game data...</p>
         </Container>
       </>
     );
   }
-  
+
   return (
     <>
       <Header />
       <Container>
         <GameTitle>{game.name}</GameTitle>
-        
+
         <DashboardContainer>
           <LeftSidebar>
             <PlayerInfo>
               <PlayerName>{currentPlayer.name}</PlayerName>
-              <PlayerRole>{currentPlayer.isBank ? 'Bank' : 'Player'}</PlayerRole>
+              <PlayerRole>
+                {currentPlayer.isBank ? "Bank" : "Player"}
+              </PlayerRole>
               <PlayerBalance isBank={currentPlayer.isBank}>
-                {currentPlayer.isBank ? 'Unlimited' : `$${currentPlayer.balance.toLocaleString()}`}
+                {currentPlayer.isBank
+                  ? "Unlimited"
+                  : `$${currentPlayer.balance.toLocaleString()}`}
               </PlayerBalance>
-              
+
               {currentPlayer.isBank && (
-                <EndGameButton 
-                  variant="bank" 
-                  onClick={handleEndGame}
-                >
+                <EndGameButton variant="bank" onClick={handleEndGame}>
                   End Game
                 </EndGameButton>
               )}
             </PlayerInfo>
-            
-            <PlayersList 
-              players={players} 
-              currentPlayerId={currentPlayer._id} 
+
+            <PlayersList
+              players={players}
+              currentPlayerId={currentPlayer._id}
             />
           </LeftSidebar>
-          
+
           <MainContent>
-            <PaymentForm 
+            <PaymentForm
               gameId={gameId}
               currentPlayer={currentPlayer}
               players={players}
               onPaymentComplete={handlePaymentComplete}
             />
-            
+
             <TransactionsList transactions={transactions} />
           </MainContent>
         </DashboardContainer>

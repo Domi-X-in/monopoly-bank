@@ -1,7 +1,7 @@
 // client/src/components/Game/TransactionsList.js
-import React from 'react';
-import styled from 'styled-components';
-import { Card } from '../Layout/Card';
+import React from "react";
+import styled from "styled-components";
+import { Card } from "../Layout/Card";
 
 const TransactionListTitle = styled.h3`
   font-size: ${({ theme }) => theme.typography.fontSizes.large};
@@ -12,7 +12,7 @@ const TransactionListTitle = styled.h3`
 const TransactionItem = styled.div`
   padding: ${({ theme }) => theme.spacing.sm};
   border-bottom: 1px solid ${({ theme }) => theme.colors.border};
-  
+
   &:last-child {
     border-bottom: none;
   }
@@ -46,28 +46,47 @@ const TransactionTime = styled.div`
 `;
 
 export const TransactionsList = ({ transactions }) => {
+  // Add defensive check to ensure transactions is an array
+  const validTransactions = Array.isArray(transactions) ? transactions : [];
+
   const formatTime = (timestamp) => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
   return (
     <Card>
       <TransactionListTitle>Recent Transactions</TransactionListTitle>
-      {transactions.length === 0 ? (
+      {validTransactions.length === 0 ? (
         <NoTransactions>No transactions yet.</NoTransactions>
       ) : (
-        transactions.map(transaction => (
-          <TransactionItem key={transaction._id}>
-            <TransactionDetails>
-              <TransactionParties>
-                {transaction.fromPlayerId.name} → {transaction.toPlayerId.name}
-              </TransactionParties>
-              <TransactionAmount>${transaction.amount.toLocaleString()}</TransactionAmount>
-            </TransactionDetails>
-            <TransactionTime>{formatTime(transaction.createdAt)}</TransactionTime>
-          </TransactionItem>
-        ))
+        validTransactions.map((transaction) => {
+          // Add additional checks to prevent accessing properties of undefined
+          if (
+            !transaction ||
+            !transaction.fromPlayerId ||
+            !transaction.toPlayerId
+          ) {
+            return null;
+          }
+
+          return (
+            <TransactionItem key={transaction._id}>
+              <TransactionDetails>
+                <TransactionParties>
+                  {transaction.fromPlayerId.name} →{" "}
+                  {transaction.toPlayerId.name}
+                </TransactionParties>
+                <TransactionAmount>
+                  ${transaction.amount.toLocaleString()}
+                </TransactionAmount>
+              </TransactionDetails>
+              <TransactionTime>
+                {formatTime(transaction.createdAt)}
+              </TransactionTime>
+            </TransactionItem>
+          );
+        })
       )}
     </Card>
   );

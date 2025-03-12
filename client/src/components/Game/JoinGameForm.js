@@ -266,4 +266,39 @@ export const JoinGameForm = ({ selectedGame }) => {
       </div>
     </Card>
   );
+  // Fetch games
+  useEffect(() => {
+    const fetchGames = async () => {
+      try {
+        const response = await api.getGames();
+        const gamesData = response.data || [];
+        setGames(gamesData);
+
+        // Set first game as default if none is selected
+        if (!selectedGameId && gamesData.length > 0) {
+          setSelectedGameId(gamesData[0]._id);
+        }
+      } catch (err) {
+        console.error("Failed to fetch games:", err);
+        setGames([]); // Set empty array on error
+      }
+    };
+
+    fetchGames();
+
+    // Listen for new games with defensive check
+    socket.on("gameCreated", (game) => {
+      if (game) {
+        setGames((prevGames) => {
+          // Ensure prevGames is an array
+          const currentGames = Array.isArray(prevGames) ? prevGames : [];
+          return [...currentGames, game];
+        });
+      }
+    });
+
+    return () => {
+      socket.off("gameCreated");
+    };
+  }, [socket, selectedGameId]);
 };
