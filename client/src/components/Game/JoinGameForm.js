@@ -6,6 +6,7 @@ import { useSocket } from "../../contexts/SocketContext";
 import { FormGroup } from "../UI/FormGroup";
 import { Input } from "../UI/Input";
 import { Select } from "../UI/Select";
+import { Button } from "../UI/Button";
 import { Card } from "../Layout/Card";
 import * as api from "../../services/api";
 
@@ -26,7 +27,7 @@ const JoinOptions = styled.div`
   }
 `;
 
-const Button = styled.button`
+const PlayerButton = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -39,9 +40,12 @@ const Button = styled.button`
   width: 100%;
   cursor: pointer;
   border: none;
+  background-color: ${({ theme }) => theme.colors.primary};
+  color: ${({ theme }) => theme.colors.secondary};
 
   &:hover:not(:disabled),
   &:focus:not(:disabled) {
+    background-color: #c01712;
     transform: translateY(-2px);
     box-shadow: ${({ theme }) => theme.shadows.medium};
   }
@@ -53,29 +57,28 @@ const Button = styled.button`
     opacity: 0.6;
     background-color: #cccccc !important;
     color: #666666 !important;
-    border-color: #cccccc !important;
   }
 `;
 
-const PlayerButton = styled(Button)`
-  background-color: ${({ theme }) => theme.colors.primary};
-  color: ${({ theme }) => theme.colors.secondary};
-
-  &:hover:not(:disabled),
-  &:focus:not(:disabled) {
-    background-color: #c01712;
-  }
-`;
-
-const BankButton = styled(Button)`
-  background-color: ${({ theme, bankExists }) =>
-    bankExists ? "#cccccc" : theme.colors.bank};
-  color: ${({ theme, bankExists }) =>
-    bankExists ? "#666666" : theme.colors.tertiary};
-  display: flex;
+const BankButton = styled.button`
+  display: inline-flex;
   flex-direction: column;
-  line-height: 1.2;
+  align-items: center;
+  justify-content: center;
   padding: ${({ theme }) => `${theme.spacing.md} ${theme.spacing.lg}`};
+  font-weight: ${({ theme }) => theme.typography.fontWeights.medium};
+  border-radius: ${({ theme }) => theme.borderRadius.small};
+  transition: all ${({ theme }) => theme.transitions.default};
+  font-size: ${({ theme }) => theme.typography.fontSizes.medium};
+  box-shadow: ${({ theme }) => theme.shadows.small};
+  width: 100%;
+  cursor: pointer;
+  border: none;
+  line-height: 1.2;
+  background-color: ${({ bankExists, theme }) =>
+    bankExists ? "#cccccc" : theme.colors.bank};
+  color: ${({ bankExists, theme }) =>
+    bankExists ? "#666666" : theme.colors.tertiary};
 
   .exists-text {
     font-size: ${({ theme }) => theme.typography.fontSizes.small};
@@ -84,43 +87,99 @@ const BankButton = styled(Button)`
 
   &:hover:not(:disabled),
   &:focus:not(:disabled) {
-    background-color: #e6b800;
+    background-color: ${({ bankExists }) =>
+      bankExists ? "#cccccc" : "#e6b800"};
+    transform: ${({ bankExists }) =>
+      bankExists ? "none" : "translateY(-2px)"};
+    box-shadow: ${({ bankExists, theme }) =>
+      bankExists ? "none" : theme.shadows.medium};
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+    opacity: 0.6;
+    background-color: #cccccc !important;
+    color: #666666 !important;
   }
 `;
 
-export const JoinGameForm = ({ selectedGame }) => {
-  const [games, setGames] = useState([]);
+const ErrorMessage = styled.div`
+  color: ${({ theme }) => theme.colors.danger};
+  background-color: #ffeeee;
+  padding: 10px;
+  border-radius: 5px;
+  margin-bottom: 15px;
+  font-size: 14px;
+`;
+
+const LoadingIndicator = styled.div`
+  text-align: center;
+  padding: 10px;
+  color: ${({ theme }) => theme.colors.textLight};
+`;
+
+export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
+  const [games, setGames] = useState(allGames || []);
   const [selectedGameId, setSelectedGameId] = useState(selectedGame?._id || "");
   const [playerName, setPlayerName] = useState("");
   const [bankExists, setBankExists] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fetchingGames, setFetchingGames] = useState(false);
   const navigate = useNavigate();
   const socket = useSocket();
 
-  // Fetch games
+  // Update games if the allGames prop changes
   useEffect(() => {
-    const fetchGames = async () => {
-      try {
-        const response = await api.getGames();
-        const gamesData = response.data || [];
-        setGames(gamesData);
+    if (Array.isArray(allGames)) {
+      setGames(allGames);
+      console.log("Games updated from props:", allGames);
+    }
+  }, [allGames]);
 
-        // Set first game as default if none is selected
-        if (!selectedGameId && gamesData.length > 0) {
-          setSelectedGameId(gamesData[0]._id);
+  // Fetch games if not provided via props
+  useEffect(() => {
+    if (!Array.isArray(allGames) || allGames.length === 0) {
+      const fetchGames = async () => {
+        try {
+          setFetchingGames(true);
+          console.log("Fetching games from JoinGameForm...");
+          const response = await api.getGames();
+          console.log("Games API response in JoinGameForm:", response);
+
+          if (response && response.data) {
+            setGames(response.data);
+
+            // Set first game as default if none is selected
+            if (!selectedGameId && response.data.length > 0) {
+              setSelectedGameId(response.data[0]._id);
+            }
+          } else {
+            console.error("Invalid response from getGames:", response);
+            setError("Failed to fetch games data");
+          }
+        } catch (err) {
+          console.error("Failed to fetch games:", err);
+          setError(`Error fetching games: ${err.message}`);
+        } finally {
+          setFetchingGames(false);
         }
-      } catch (err) {
-        console.error("Failed to fetch games:", err);
-        setGames([]); // Set empty array on error
-      }
-    };
+      };
 
-    fetchGames();
+      fetchGames();
+    }
+  }, [allGames, selectedGameId]);
 
-    // Listen for new games with defensive check
+  // Subscribe to socket events
+  useEffect(() => {
     if (socket) {
+      console.log("Setting up socket listeners in JoinGameForm");
+
+      // Listen for new games
       socket.on("gameCreated", (game) => {
+        console.log("New game received via socket:", game);
         if (game) {
           setGames((prevGames) => {
             // Ensure prevGames is an array
@@ -134,42 +193,50 @@ export const JoinGameForm = ({ selectedGame }) => {
         socket.off("gameCreated");
       };
     }
-  }, [socket, selectedGameId]);
+  }, [socket]);
 
   // Check if bank exists for selected game
   useEffect(() => {
-    if (selectedGameId && socket) {
+    if (selectedGameId) {
       const checkBankExists = async () => {
         try {
+          console.log("Checking if bank exists for game:", selectedGameId);
           const response = await api.getPlayers(selectedGameId);
+          console.log("Players API response:", response);
+
           const hasBank =
             response.data &&
             Array.isArray(response.data) &&
             response.data.some((player) => player.isBank);
+
+          console.log("Bank exists:", hasBank);
           setBankExists(hasBank);
+
+          // Join the game room for real-time updates
+          if (socket) {
+            socket.emit("joinGame", selectedGameId);
+
+            // Listen for player joined events
+            socket.on("playerJoined", (player) => {
+              console.log("Player joined:", player);
+              if (player && player.gameId === selectedGameId && player.isBank) {
+                setBankExists(true);
+              }
+            });
+
+            return () => {
+              socket.off("playerJoined");
+            };
+          }
         } catch (err) {
           console.error("Failed to check if bank exists:", err);
-          setBankExists(false);
+          setError(`Failed to check bank status: ${err.message}`);
         }
       };
 
       checkBankExists();
-
-      // Join the game room for real-time updates
-      socket.emit("joinGame", selectedGameId);
-
-      // Listen for player joined events
-      socket.on("playerJoined", (player) => {
-        if (player && player.gameId === selectedGameId && player.isBank) {
-          setBankExists(true);
-        }
-      });
-
-      return () => {
-        socket.off("playerJoined");
-      };
     }
-  }, [socket, selectedGameId]);
+  }, [selectedGameId, socket]);
 
   const handleJoin = async (isBank) => {
     if (!selectedGameId) {
@@ -189,6 +256,13 @@ export const JoinGameForm = ({ selectedGame }) => {
 
     try {
       setLoading(true);
+      setError("");
+
+      console.log("Creating player:", {
+        name: playerName,
+        gameId: selectedGameId,
+        isBank,
+      });
 
       // Create player
       const playerData = {
@@ -198,86 +272,149 @@ export const JoinGameForm = ({ selectedGame }) => {
       };
 
       const response = await api.createPlayer(playerData);
+      console.log("Player created:", response.data);
 
       // Navigate to player dashboard
       navigate(`/game/${selectedGameId}/player/${response.data._id}`);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to join game");
+      console.error("Error joining game:", err);
+      setError(
+        err.response?.data?.message || `Failed to join game: ${err.message}`
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  if (!Array.isArray(games) || games.length === 0) {
+  const handleRefresh = () => {
+    if (onRefreshGames) {
+      onRefreshGames();
+    } else {
+      // Fetch games directly if no refresh callback provided
+      const fetchGames = async () => {
+        try {
+          setFetchingGames(true);
+          const response = await api.getGames();
+
+          if (response && response.data) {
+            setGames(response.data);
+          }
+        } catch (err) {
+          console.error("Failed to refresh games:", err);
+          setError(`Error refreshing games: ${err.message}`);
+        } finally {
+          setFetchingGames(false);
+        }
+      };
+
+      fetchGames();
+    }
+  };
+
+  if (fetchingGames) {
     return (
       <Card>
         <FormTitle>Join Game</FormTitle>
-        <p>No active games available. Please create a new game.</p>
+        <LoadingIndicator>Loading games...</LoadingIndicator>
       </Card>
     );
   }
 
+  // Check if we have any games to display
+  const hasGames = Array.isArray(games) && games.length > 0;
+
   return (
     <Card>
       <FormTitle>Join Game</FormTitle>
-      <div>
-        <FormGroup>
-          <label htmlFor="gameSelect">Select Game</label>
-          <Select
-            id="gameSelect"
-            value={selectedGameId}
-            onChange={(e) => setSelectedGameId(e.target.value)}
-            required
+
+      {error && <ErrorMessage>{error}</ErrorMessage>}
+
+      {!hasGames ? (
+        <div>
+          <p>No active games available. Please create a new game.</p>
+          <Button
+            variant="primary"
+            onClick={handleRefresh}
+            fullWidth
+            style={{ marginTop: "15px" }}
           >
-            <option value="">-- Select a game --</option>
-            {games.map((game) => (
-              <option key={game._id} value={game._id}>
-                {game.name}
-              </option>
-            ))}
-          </Select>
-        </FormGroup>
+            Refresh Games
+          </Button>
+        </div>
+      ) : (
+        <div>
+          <FormGroup>
+            <label htmlFor="gameSelect">Select Game</label>
+            <Select
+              id="gameSelect"
+              value={selectedGameId}
+              onChange={(e) => setSelectedGameId(e.target.value)}
+              required
+            >
+              <option value="">-- Select a game --</option>
+              {games.map((game) => (
+                <option key={game._id} value={game._id}>
+                  {game.name}
+                </option>
+              ))}
+            </Select>
+          </FormGroup>
 
-        <FormGroup>
-          <label htmlFor="playerName">Your Name</label>
-          <Input
-            id="playerName"
-            type="text"
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            placeholder="Enter your name"
-            required
-          />
-        </FormGroup>
+          <FormGroup>
+            <label htmlFor="playerName">Your Name</label>
+            <Input
+              id="playerName"
+              type="text"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              placeholder="Enter your name"
+              required
+            />
+          </FormGroup>
 
-        {error && (
-          <div className="error" style={{ color: "red", marginBottom: "1rem" }}>
-            {error}
+          <JoinOptions>
+            <PlayerButton
+              onClick={() => handleJoin(false)}
+              disabled={loading || !selectedGameId || !playerName.trim()}
+            >
+              Join as Player
+            </PlayerButton>
+
+            <BankButton
+              onClick={() => handleJoin(true)}
+              disabled={
+                loading || bankExists || !selectedGameId || !playerName.trim()
+              }
+              bankExists={bankExists}
+            >
+              Join as Bank
+              {bankExists && (
+                <span className="exists-text">(Already Exists)</span>
+              )}
+            </BankButton>
+          </JoinOptions>
+
+          <div style={{ marginTop: "15px", textAlign: "center" }}>
+            <Button
+              variant="secondary"
+              onClick={handleRefresh}
+              disabled={loading || fetchingGames}
+            >
+              Refresh Games
+            </Button>
           </div>
-        )}
+        </div>
+      )}
 
-        <JoinOptions>
-          <PlayerButton
-            onClick={() => handleJoin(false)}
-            disabled={loading || !selectedGameId || !playerName.trim()}
-          >
-            Join as Player
-          </PlayerButton>
-
-          <BankButton
-            onClick={() => handleJoin(true)}
-            disabled={
-              loading || bankExists || !selectedGameId || !playerName.trim()
-            }
-            bankExists={bankExists}
-          >
-            Join as Bank
-            {bankExists && (
-              <span className="exists-text">(Already Exists)</span>
-            )}
-          </BankButton>
-        </JoinOptions>
-      </div>
+      {/* Optional debug info for development */}
+      {process.env.NODE_ENV !== "production" && (
+        <div style={{ marginTop: "20px", fontSize: "12px", color: "#777" }}>
+          <div>Games count: {games ? games.length : 0}</div>
+          <div>Selected game: {selectedGameId || "None"}</div>
+          <div>Socket connected: {socket ? "Yes" : "No"}</div>
+          <div>Bank exists: {bankExists ? "Yes" : "No"}</div>
+        </div>
+      )}
     </Card>
   );
 };
