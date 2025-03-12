@@ -1,8 +1,12 @@
 // client/src/services/api.js
 import axios from "axios";
 
+//const api = axios.create({
+//  baseURL: "http://localhost:5002/api",
+//});
+
 const api = axios.create({
-  baseURL: "http://localhost:5002/api",
+  baseURL: "/api", // Use relative path for deployed environment
 });
 
 // Game related API calls
