@@ -103,39 +103,53 @@ export const JoinGameForm = ({ selectedGame }) => {
     const fetchGames = async () => {
       try {
         const response = await api.getGames();
-        setGames(response.data);
+        const gamesData = response.data || [];
+        setGames(gamesData);
 
         // Set first game as default if none is selected
-        if (!selectedGameId && response.data.length > 0) {
-          setSelectedGameId(response.data[0]._id);
+        if (!selectedGameId && gamesData.length > 0) {
+          setSelectedGameId(gamesData[0]._id);
         }
       } catch (err) {
         console.error("Failed to fetch games:", err);
+        setGames([]); // Set empty array on error
       }
     };
 
     fetchGames();
 
-    // Listen for new games
-    socket.on("gameCreated", (game) => {
-      setGames((prevGames) => [...prevGames, game]);
-    });
+    // Listen for new games with defensive check
+    if (socket) {
+      socket.on("gameCreated", (game) => {
+        if (game) {
+          setGames((prevGames) => {
+            // Ensure prevGames is an array
+            const currentGames = Array.isArray(prevGames) ? prevGames : [];
+            return [...currentGames, game];
+          });
+        }
+      });
 
-    return () => {
-      socket.off("gameCreated");
-    };
+      return () => {
+        socket.off("gameCreated");
+      };
+    }
   }, [socket, selectedGameId]);
 
   // Check if bank exists for selected game
   useEffect(() => {
-    if (selectedGameId) {
+    if (selectedGameId && socket) {
       const checkBankExists = async () => {
         try {
           const response = await api.getPlayers(selectedGameId);
-          const hasBank = response.data.some((player) => player.isBank);
+          const hasBank =
+            response.data &&
+            Array.isArray(response.data) &&
+            response.data.some((player) => player.isBank);
           setBankExists(hasBank);
         } catch (err) {
           console.error("Failed to check if bank exists:", err);
+          setBankExists(false);
         }
       };
 
@@ -146,7 +160,7 @@ export const JoinGameForm = ({ selectedGame }) => {
 
       // Listen for player joined events
       socket.on("playerJoined", (player) => {
-        if (player.gameId === selectedGameId && player.isBank) {
+        if (player && player.gameId === selectedGameId && player.isBank) {
           setBankExists(true);
         }
       });
@@ -194,7 +208,7 @@ export const JoinGameForm = ({ selectedGame }) => {
     }
   };
 
-  if (games.length === 0) {
+  if (!Array.isArray(games) || games.length === 0) {
     return (
       <Card>
         <FormTitle>Join Game</FormTitle>
@@ -266,39 +280,4 @@ export const JoinGameForm = ({ selectedGame }) => {
       </div>
     </Card>
   );
-  // Fetch games
-  useEffect(() => {
-    const fetchGames = async () => {
-      try {
-        const response = await api.getGames();
-        const gamesData = response.data || [];
-        setGames(gamesData);
-
-        // Set first game as default if none is selected
-        if (!selectedGameId && gamesData.length > 0) {
-          setSelectedGameId(gamesData[0]._id);
-        }
-      } catch (err) {
-        console.error("Failed to fetch games:", err);
-        setGames([]); // Set empty array on error
-      }
-    };
-
-    fetchGames();
-
-    // Listen for new games with defensive check
-    socket.on("gameCreated", (game) => {
-      if (game) {
-        setGames((prevGames) => {
-          // Ensure prevGames is an array
-          const currentGames = Array.isArray(prevGames) ? prevGames : [];
-          return [...currentGames, game];
-        });
-      }
-    });
-
-    return () => {
-      socket.off("gameCreated");
-    };
-  }, [socket, selectedGameId]);
 };

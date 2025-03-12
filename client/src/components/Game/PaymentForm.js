@@ -7,36 +7,6 @@ import { Button } from "../UI/Button";
 import { Card } from "../Layout/Card";
 import * as api from "../../services/api";
 
-export const PaymentForm = ({ gameId, currentPlayer, players, onPaymentComplete }) => {
-    const [amount, setAmount] = useState('');
-    const [recipientId, setRecipientId] = useState('');
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [recipients, setRecipients] = useState([]);
-    
-    // Filter and prepare recipients list with defensive checks
-    useEffect(() => {
-      // Ensure players is an array
-      if (!Array.isArray(players)) {
-        setRecipients([]);
-        return;
-      }
-      
-      // Filter out current player with defensive check
-      const filteredPlayers = currentPlayer ? 
-        players.filter(player => player._id !== currentPlayer._id) : [];
-      
-      // Ensure the Bank is always included for players
-      if (currentPlayer && !currentPlayer.isBank) {
-        const bankPlayer = players.find(player => player.isBank);
-        if (bankPlayer && !filteredPlayers.some(p => p._id === bankPlayer._id)) {
-          filteredPlayers.push(bankPlayer);
-        }
-      }
-      
-      setRecipients(filteredPlayers);
-    }, [players, currentPlayer]);
-
 const FormTitle = styled.h3`
   font-size: ${({ theme }) => theme.typography.fontSizes.large};
   margin-bottom: ${({ theme }) => theme.spacing.md};
@@ -124,15 +94,21 @@ export const PaymentForm = ({
   const [loading, setLoading] = useState(false);
   const [recipients, setRecipients] = useState([]);
 
-  // Filter and prepare recipients list
+  // Filter and prepare recipients list with defensive checks
   useEffect(() => {
-    // Filter out current player
-    const filteredPlayers = players.filter(
-      (player) => player._id !== currentPlayer._id
-    );
+    // Ensure players is an array
+    if (!Array.isArray(players)) {
+      setRecipients([]);
+      return;
+    }
+
+    // Filter out current player with defensive check
+    const filteredPlayers = currentPlayer
+      ? players.filter((player) => player._id !== currentPlayer._id)
+      : [];
 
     // Ensure the Bank is always included for players
-    if (!currentPlayer.isBank) {
+    if (currentPlayer && !currentPlayer.isBank) {
       const bankPlayer = players.find((player) => player.isBank);
       if (
         bankPlayer &&
