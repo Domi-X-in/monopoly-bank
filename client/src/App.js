@@ -8,22 +8,25 @@ import { theme } from "./styles/theme";
 import WelcomePage from "./pages/WelcomePage";
 import GameLobby from "./pages/GameLobby";
 import PlayerDashboard from "./pages/PlayerDashboard";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 function App() {
   return (
     <ThemeProvider theme={theme}>
       <GlobalStyles />
-      <SocketProvider>
-        <Routes>
-          <Route path="/" element={<WelcomePage />} />
-          <Route path="/games" element={<GameLobby />} />
-          <Route
-            path="/game/:gameId/player/:playerId"
-            element={<PlayerDashboard />}
-          />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </SocketProvider>
+      <ErrorBoundary>
+        <SocketProvider>
+          <Routes>
+            <Route path="/" element={<WelcomePage />} />
+            <Route path="/games" element={<GameLobby />} />
+            <Route
+              path="/game/:gameId/player/:playerId"
+              element={<PlayerDashboard />}
+            />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </SocketProvider>
+      </ErrorBoundary>
     </ThemeProvider>
   );
 }
