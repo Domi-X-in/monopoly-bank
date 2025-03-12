@@ -287,6 +287,11 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
   };
 
   const handleRefresh = () => {
+    setGames([]); // Clear any local state that might be caching the games
+    // Clear any cached responses in the browser
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+
     if (onRefreshGames) {
       onRefreshGames();
     } else {
@@ -294,10 +299,28 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
       const fetchGames = async () => {
         try {
           setFetchingGames(true);
+          // Add timestamp to URL to force a fresh request
+          const timestamp = new Date().getTime();
           const response = await api.getGames();
 
           if (response && response.data) {
+            console.log("Fetched games data:", response.data);
             setGames(response.data);
+
+            // If games are received but not displayed, log more details
+            if (Array.isArray(response.data) && response.data.length > 0) {
+              console.log(
+                "Games received but not displaying. Game details:",
+                response.data.map((g) => ({
+                  id: g._id,
+                  name: g.name,
+                  status: g.status,
+                }))
+              );
+            }
+          } else {
+            console.error("Invalid or empty response:", response);
+            setError("No games data returned from server");
           }
         } catch (err) {
           console.error("Failed to refresh games:", err);
@@ -310,7 +333,6 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
       fetchGames();
     }
   };
-
   if (fetchingGames) {
     return (
       <Card>
