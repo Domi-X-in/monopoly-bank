@@ -114,6 +114,15 @@ const ErrorMessage = styled.div`
   font-size: 14px;
 `;
 
+const WarningMessage = styled.div`
+  color: #856404;
+  background-color: #fff3cd;
+  padding: 10px;
+  border-radius: 5px;
+  margin-bottom: 15px;
+  font-size: 14px;
+`;
+
 const LoadingIndicator = styled.div`
   text-align: center;
   padding: 10px;
@@ -126,6 +135,7 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
   const [playerName, setPlayerName] = useState("");
   const [bankExists, setBankExists] = useState(false);
   const [error, setError] = useState("");
+  const [warning, setWarning] = useState("");
   const [loading, setLoading] = useState(false);
   const [fetchingGames, setFetchingGames] = useState(false);
   const navigate = useNavigate();
@@ -143,9 +153,11 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
       console.log(`Active games count: ${activeGames.length}`);
 
       if (games.length > 0 && activeGames.length === 0) {
-        console.warn(
-          "Games exist but none are active! Check status field case sensitivity."
+        setWarning(
+          "Games exist but none are active. Check status field case sensitivity."
         );
+      } else {
+        setWarning("");
       }
     }
   }, [games]);
@@ -165,119 +177,9 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
         try {
           setFetchingGames(true);
           console.log("Fetching games from JoinGameForm...");
-          const response = await api.getGames();
-          console.log("Raw Games API response:", response);
 
-          // Extract games data from response - handle different possible formats
-          let gamesData;
-
-          if (Array.isArray(response)) {
-            // Direct array response
-            gamesData = response;
-            console.log(
-              "Response is a direct array with",
-              gamesData.length,
-              "games"
-            );
-          } else if (Array.isArray(response.data)) {
-            // Response has data property that is an array
-            gamesData = response.data;
-            console.log(
-              "Found games array in response.data with",
-              gamesData.length,
-              "items"
-            );
-          } else if (response && typeof response === "object") {
-            if (
-              response.data &&
-              typeof response.data === "object" &&
-              !Array.isArray(response.data)
-            ) {
-              // Handle object response with nested structure
-              console.log(
-                "Response.data is an object, checking for games arrays inside"
-              );
-
-              // Check for common wrapper patterns
-              const possibleArrayProps = ["data", "games", "results", "items"];
-              let foundArray = false;
-
-              for (const prop of possibleArrayProps) {
-                if (Array.isArray(response.data[prop])) {
-                  gamesData = response.data[prop];
-                  console.log(
-                    `Found games array in response.data.${prop} with ${gamesData.length} items`
-                  );
-                  foundArray = true;
-                  break;
-                }
-              }
-
-              if (!foundArray) {
-                // Last resort - check if the object itself has game properties
-                if (response.data._id && response.data.name) {
-                  // Single game object
-                  gamesData = [response.data];
-                  console.log("Found a single game object in response.data");
-                } else {
-                  console.warn(
-                    "Couldn't find a games array in response.data object"
-                  );
-                  gamesData = [];
-                }
-              }
-            } else {
-              // Direct response object might have games
-              console.log("Response is an object, checking for games arrays");
-
-              // Check for common wrapper patterns
-              const possibleArrayProps = ["data", "games", "results", "items"];
-              let foundArray = false;
-
-              for (const prop of possibleArrayProps) {
-                if (Array.isArray(response[prop])) {
-                  gamesData = response[prop];
-                  console.log(
-                    `Found games array in response.${prop} with ${gamesData.length} items`
-                  );
-                  foundArray = true;
-                  break;
-                }
-              }
-
-              if (!foundArray) {
-                // Last resort - check if the object itself has game properties
-                if (response._id && response.name) {
-                  // Single game object
-                  gamesData = [response];
-                  console.log("Found a single game object in response");
-                } else {
-                  console.warn(
-                    "Couldn't find a games array in response object"
-                  );
-                  // Default to empty array as fallback
-                  gamesData = [];
-                }
-              }
-            }
-          } else {
-            console.error("Unexpected response format:", typeof response);
-            gamesData = [];
-          }
-
-          // Log extracted data
-          if (Array.isArray(gamesData)) {
-            console.log("Final extracted games data:", gamesData);
-            setGames(gamesData);
-
-            // Set first game as default if none is selected
-            if (!selectedGameId && gamesData.length > 0) {
-              setSelectedGameId(gamesData[0]._id);
-            }
-          } else {
-            console.error("Failed to extract games array");
-            setError("Unexpected data format received from server");
-          }
+          // Use a direct fetch instead of the API service
+          await handleRefresh();
         } catch (err) {
           console.error("Failed to fetch games:", err);
           setError(`Error fetching games: ${err.message}`);
@@ -319,28 +221,66 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
       const checkBankExists = async () => {
         try {
           console.log("Checking if bank exists for game:", selectedGameId);
-          const response = await api.getPlayers(selectedGameId);
-          console.log("Players API response:", response);
+
+          // Use direct fetch for players to avoid potential issues with the API service
+          const baseUrl = window.location.origin;
+          const response = await fetch(
+            `${baseUrl}/api/players/game/${selectedGameId}?_=${new Date().getTime()}`,
+            {
+              headers: {
+                Accept: "application/json",
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                Pragma: "no-cache",
+                Expires: "0",
+              },
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const responseText = await response.text();
+
+          // Check if response is HTML instead of JSON
+          if (
+            responseText.trim().startsWith("<!DOCTYPE") ||
+            responseText.trim().startsWith("<html")
+          ) {
+            console.error("Received HTML instead of JSON from players API");
+            throw new Error(
+              "Server returned HTML instead of JSON. Check server configuration."
+            );
+          }
+
+          let playersData;
+          try {
+            playersData = JSON.parse(responseText);
+          } catch (e) {
+            console.error("Failed to parse players JSON:", e);
+            throw new Error("Invalid JSON in players response");
+          }
+
+          console.log("Players API response:", playersData);
 
           // Extract players data - handle different response formats
-          let playersData;
+          let players;
 
-          if (Array.isArray(response)) {
-            playersData = response;
+          if (Array.isArray(playersData)) {
+            players = playersData;
           } else if (
-            response &&
-            response.data &&
-            Array.isArray(response.data)
+            playersData &&
+            playersData.data &&
+            Array.isArray(playersData.data)
           ) {
-            playersData = response.data;
+            players = playersData.data;
           } else {
             console.error("Unexpected players response format");
-            playersData = [];
+            players = [];
           }
 
           const hasBank =
-            Array.isArray(playersData) &&
-            playersData.some((player) => player.isBank);
+            Array.isArray(players) && players.some((player) => player.isBank);
 
           console.log("Bank exists:", hasBank);
           setBankExists(hasBank);
@@ -397,25 +337,58 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
         isBank,
       });
 
-      // Create player
-      const playerData = {
-        name: playerName,
-        gameId: selectedGameId,
-        isBank,
-      };
+      // Create player with direct fetch to avoid potential issues
+      const baseUrl = window.location.origin;
+      const response = await fetch(`${baseUrl}/api/players`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "Cache-Control": "no-cache",
+        },
+        body: JSON.stringify({
+          name: playerName,
+          gameId: selectedGameId,
+          isBank,
+        }),
+      });
 
-      const response = await api.createPlayer(playerData);
-      console.log("Player created response:", response);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const responseText = await response.text();
+
+      // Check if response is HTML instead of JSON
+      if (
+        responseText.trim().startsWith("<!DOCTYPE") ||
+        responseText.trim().startsWith("<html")
+      ) {
+        console.error("Received HTML instead of JSON from player creation API");
+        throw new Error(
+          "Server returned HTML instead of JSON. Check server configuration."
+        );
+      }
+
+      let responseData;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (e) {
+        console.error("Failed to parse player creation JSON:", e);
+        throw new Error("Invalid JSON in player creation response");
+      }
+
+      console.log("Player created response:", responseData);
 
       // Extract player data from response
       let createdPlayer;
 
-      if (response && response.data) {
-        createdPlayer = response.data;
-      } else if (response && response._id) {
-        createdPlayer = response;
+      if (responseData && responseData.data) {
+        createdPlayer = responseData.data;
+      } else if (responseData && responseData._id) {
+        createdPlayer = responseData;
       } else {
-        console.error("Unexpected player creation response:", response);
+        console.error("Unexpected player creation response:", responseData);
         throw new Error("Invalid player creation response");
       }
 
@@ -445,9 +418,18 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
 
       console.log("Refreshing games with direct fetch...");
 
-      // Make direct fetch request to bypass any caching
-      const response = await fetch("/api/games?_=" + new Date().getTime(), {
+      // Get the base URL to ensure we hit the correct API endpoint
+      const baseUrl = window.location.origin;
+      const apiUrl = `${baseUrl}/api/games`;
+
+      console.log(`Making API request to: ${apiUrl}`);
+
+      // Make direct fetch request with full URL and proper headers
+      const response = await fetch(`${apiUrl}?_=${new Date().getTime()}`, {
+        method: "GET",
         headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
           "Cache-Control": "no-cache, no-store, must-revalidate",
           Pragma: "no-cache",
           Expires: "0",
@@ -455,6 +437,10 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
       });
 
       console.log("Fetch response status:", response.status);
+      console.log("Response headers:", {
+        "content-type": response.headers.get("content-type"),
+        "cache-control": response.headers.get("cache-control"),
+      });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -462,7 +448,27 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
 
       // Get the response text first for debugging
       const responseText = await response.text();
-      console.log("Raw response text:", responseText);
+      console.log(
+        "Raw response first 100 chars:",
+        responseText.substring(0, 100)
+      );
+
+      // Check if it's HTML (which would indicate a routing issue)
+      if (
+        responseText.trim().startsWith("<!DOCTYPE") ||
+        responseText.trim().startsWith("<html")
+      ) {
+        console.error(
+          "Received HTML instead of JSON - API route may be incorrect"
+        );
+        setError(`
+          Server returned HTML instead of JSON. This is likely a routing issue.
+          
+          The server is serving the React app for /api/games instead of the API endpoint.
+          Check your server.js file to ensure API routes are registered BEFORE the static file serving.
+        `);
+        return;
+      }
 
       // Parse it as JSON if not empty
       if (!responseText.trim()) {
@@ -481,7 +487,7 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
         console.log("Full response data:", responseData);
       } catch (e) {
         console.error("Failed to parse JSON:", e);
-        setError("Invalid JSON response from server");
+        setError(`Invalid JSON response from server: ${e.message}`);
         return;
       }
 
@@ -569,6 +575,7 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
       <FormTitle>Join Game</FormTitle>
 
       {error && <ErrorMessage>{error}</ErrorMessage>}
+      {warning && <WarningMessage>{warning}</WarningMessage>}
 
       {!hasGames ? (
         <div>
@@ -653,6 +660,7 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
         <div>Selected game: {selectedGameId || "None"}</div>
         <div>Socket connected: {socket ? "Yes" : "No"}</div>
         <div>Bank exists: {bankExists ? "Yes" : "No"}</div>
+        <div>API URL: {window.location.origin}/api/games</div>
       </div>
     </Card>
   );
