@@ -49,7 +49,7 @@ const GameLobby = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const socket = useSocket();
-  const [game, setGame] = useState(location.state?.createdGame || null);
+  const [game] = useState(location.state?.createdGame || null);
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
