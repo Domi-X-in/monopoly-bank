@@ -1,9 +1,14 @@
 // client/src/services/api.js
 import axios from "axios";
 
+// Determine base API URL - use env var in development if provided
+const baseURL = process.env.REACT_APP_SERVER_URL
+  ? `${process.env.REACT_APP_SERVER_URL}/api`
+  : "/api";
+
 // Create an axios instance with default configuration
 const api = axios.create({
-  baseURL: "/api",
+  baseURL,
   headers: {
     "Cache-Control": "no-cache, no-store, must-revalidate",
     Pragma: "no-cache",

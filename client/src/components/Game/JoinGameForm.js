@@ -223,7 +223,7 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
           console.log("Checking if bank exists for game:", selectedGameId);
 
           // Use direct fetch for players to avoid potential issues with the API service
-          const baseUrl = window.location.origin;
+          const baseUrl = process.env.REACT_APP_SERVER_URL || window.location.origin;
           const response = await fetch(
             `${baseUrl}/api/players/game/${selectedGameId}?_=${new Date().getTime()}`,
             {
@@ -338,7 +338,7 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
       });
 
       // Create player with direct fetch to avoid potential issues
-      const baseUrl = window.location.origin;
+      const baseUrl = process.env.REACT_APP_SERVER_URL || window.location.origin;
       const response = await fetch(`${baseUrl}/api/players`, {
         method: "POST",
         headers: {
@@ -419,7 +419,7 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
       console.log("Refreshing games with direct fetch...");
 
       // Get the base URL to ensure we hit the correct API endpoint
-      const baseUrl = window.location.origin;
+      const baseUrl = process.env.REACT_APP_SERVER_URL || window.location.origin;
       const apiUrl = `${baseUrl}/api/games`;
 
       console.log(`Making API request to: ${apiUrl}`);
@@ -660,7 +660,9 @@ export const JoinGameForm = ({ selectedGame, allGames, onRefreshGames }) => {
         <div>Selected game: {selectedGameId || "None"}</div>
         <div>Socket connected: {socket ? "Yes" : "No"}</div>
         <div>Bank exists: {bankExists ? "Yes" : "No"}</div>
-        <div>API URL: {window.location.origin}/api/games</div>
+        <div>
+          API URL: {(process.env.REACT_APP_SERVER_URL || window.location.origin)}/api/games
+        </div>
       </div>
     </Card>
   );

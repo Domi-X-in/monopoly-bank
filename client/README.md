@@ -14,6 +14,16 @@ Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 The page will reload when you make changes.\
 You may also see any lint errors in the console.
 
+## Environment Variables
+
+Create a `.env` file in the `client` directory to specify where the React app should send API and WebSocket requests during development.
+
+```
+REACT_APP_SERVER_URL=http://localhost:5002
+```
+
+When set, the frontend will use this URL instead of the current page origin.
+
 ### `npm test`
 
 Launches the test runner in the interactive watch mode.\
