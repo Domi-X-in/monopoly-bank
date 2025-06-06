@@ -8,7 +8,6 @@ import { Input } from "../UI/Input";
 import { Select } from "../UI/Select";
 import { Button } from "../UI/Button";
 import { Card } from "../Layout/Card";
-import * as api from "../../services/api";
 
 const FormTitle = styled.h2`
   font-size: ${({ theme }) => theme.typography.fontSizes.xlarge};
