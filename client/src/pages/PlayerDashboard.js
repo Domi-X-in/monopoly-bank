@@ -127,7 +127,7 @@ const PlayerDashboard = () => {
   useEffect(() => {
     if (!socket) return;
 
-    /// Player joined event
+    // Player joined event
     socket.on("playerJoined", (newPlayer) => {
       if (newPlayer && newPlayer.gameId === gameId) {
         setPlayers((prevPlayers) => {
