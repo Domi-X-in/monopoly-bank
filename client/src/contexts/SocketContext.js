@@ -13,14 +13,15 @@ export const SocketProvider = ({ children }) => {
 
   useEffect(() => {
     try {
-      // Connect to the server using relative URL with options
-      const newSocket = io(window.location.origin, {
+      // Connect to the server using env var when provided
+      const serverUrl = process.env.REACT_APP_SERVER_URL || window.location.origin;
+      const newSocket = io(serverUrl, {
         reconnectionAttempts: 5,
         timeout: 10000,
         transports: ["websocket", "polling"], // Try websocket first, fallback to polling
       });
 
-      console.log("Attempting socket connection to:", window.location.origin);
+      console.log("Attempting socket connection to:", serverUrl);
 
       // Set up event handlers
       newSocket.on("connect_error", (err) => {
