@@ -10,4 +10,10 @@ router.post("/", transactionController.createTransaction);
 // Route to get all transactions in a game
 router.get("/game/:gameId", transactionController.getTransactionsByGame);
 
+// Route to update a transaction
+router.patch("/:transactionId", transactionController.updateTransaction);
+
+// Route to delete a transaction
+router.delete("/:transactionId", transactionController.deleteTransaction);
+
 module.exports = router;
